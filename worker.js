@@ -70,4 +70,16 @@ async function route(req, env) {
  if(path==="/api/admin/overview"&&method==="GET") { const u=await currentUser(req,env); if(!u) return fail("Please sign in.",401); if(u.role!=="admin") return fail("Admin access required.",403); const [users,cards,visits]=await Promise.all([env.DB.prepare("SELECT COUNT(*) n FROM users").first(),env.DB.prepare("SELECT COUNT(*) n FROM cards").first(),env.DB.prepare("SELECT COUNT(*) n FROM visits").first()]); const latest=await env.DB.prepare("SELECT c.id,c.slug,c.display_name,c.is_published,u.email FROM cards c JOIN users u ON u.id=c.user_id ORDER BY c.created_at DESC LIMIT 100").all(); return json({users:users.n,cards:cards.n,visits:visits.n,latest:latest.results}); }
  return null;
 }
-export default { async fetch(req,env) { const url=new URL(req.url); if(url.pathname.startsWith("/api/")) { if(!env.SESSION_SECRET) return fail("Server setup incomplete: SESSION_SECRET is missing.",500); try { const res=await route(req,env); return res||fail("Not found.",404); } catch(e) { console.error(e); return fail("Unexpected server error.",500); } } return env.ASSETS.fetch(req); } };
+export default { async fetch(req,env) { const url=new URL(req.url); if(url.pathname.startsWith("/api/")) { if(!env.SESSION_SECRET) return fail("Server setup incomplete: SESSION_SECRET is missing.",500); try { const res=await route(req,env); return res||fail("Not found.",404); } catch(e) { console.error(e); return fail("Unexpected server error.",500); } } const allowed = new Set(["/index.html", "/app.js", "/styles.css", "/manifest.webmanifest"]);
+ const assetPath = url.pathname === "/" ? "/index.html" : url.pathname;
+ if (allowed.has(assetPath)) {
+   const assetUrl = new URL(req.url);
+   assetUrl.pathname = assetPath;
+   return env.ASSETS.fetch(new Request(assetUrl, req));
+ }
+ if (!url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
+   const assetUrl = new URL(req.url);
+   assetUrl.pathname = "/index.html";
+   return env.ASSETS.fetch(new Request(assetUrl, req));
+ }
+ return new Response("Not found", {status:404}); } };
